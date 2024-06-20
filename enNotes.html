@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luxe Notes</title>
+  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.3/dist/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #e2e8f0;
+    }
+    .note-container {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      transition: all 0.3s ease;
+    }
+    .note-container:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .modal {
+      background-color: rgba(0, 0, 0, 0.7);
+    }
+    .modal-content {
+      background-color: #1e293b;
+    }
+    .btn {
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+    .markdown h1 { font-size: 1.5em; font-weight: bold; margin-top: 1em; }
+    .markdown h2 { font-size: 1.3em; font-weight: bold; margin-top: 0.8em; }
+    .markdown h3 { font-size: 1.1em; font-weight: bold; margin-top: 0.6em; }
+    .markdown p { margin-top: 0.5em; }
+    .markdown ul, .markdown ol { margin-left: 1.5em; margin-top: 0.5em; }
+    .markdown code { background-color: #2d3748; padding: 0.2em 0.4em; border-radius: 3px; }
+    .markdown pre { background-color: #2d3748; padding: 1em; border-radius: 5px; overflow-x: auto; }
+    .markdown blockquote { border-left: 3px solid #4a5568; padding-left: 1em; margin-left: 0; color: #a0aec0; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #2d3748; }
+    ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #718096; }
+    .dark-mode { background-color: #1a202c; color: #f7fafc; }
+    .light-mode { background-color: #f7fafc; color: #1a202c; }
+    .tag { display: inline-block; background-color: #4a5568; color: #e2e8f0; padding: 2px 6px; border-radius: 4px; margin-right: 4px; margin-bottom: 4px; font-size: 0.8em; }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen p-4">
+  <div class="container mx-auto max-w-5xl">
+    <div class="mb-6 flex space-x-2">
+      <div class="relative flex-grow">
+        <input id="searchInput" type="text" placeholder="Search notes..." class="w-full p-3 bg-gray-800 text-white rounded-lg pl-10">
+        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+      </div>
+      <button id="addNoteBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-lg btn flex items-center">
+        <i class="fas fa-plus mr-1"></i><span class="text-md font-semibold">Add</span>
+      </button>
+      <button id="toggleThemeBtn" class="bg-gray-600 hover:bg-gray-700 text-white p-3 rounded-lg btn flex items-center">
+        <i class="fas fa-moon "></i><span class="text-md font-semibold"></span>
+      </button>
+    </div>
+    <div id="notesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Notes will be dynamically added here -->
+    </div>
+  </div>
+
+  <!-- Add/Edit Note Modal -->
+  <div id="noteModal" class="fixed inset-0 flex items-center justify-center hidden modal">
+    <div class="modal-content rounded-lg p-6 w-full max-w-2xl">
+      <h2 id="modalTitle" class="text-2xl font-bold mb-4 text-indigo-400"></h2>
+      <textarea id="noteText" class="w-full p-4 text-lg bg-gray-800 text-white rounded-lg mb-4" rows="10" placeholder="Write your note here (Markdown supported)..."></textarea>
+      <div id="tagInput" class="mb-4">
+        <input type="text" id="tagField" placeholder="Add tags (comma-separated)" class="w-full p-2 bg-gray-800 text-white rounded-lg">
+      </div>
+      <div id="tagsDisplay" class="mb-4"></div>
+      <div class="flex justify-between">
+        <button id="saveNoteBtn" class="bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg btn flex items-center">
+          <i class="fas fa-save mr-2"></i> Save
+        </button>
+        <button id="deleteNoteBtn" class="bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg btn flex items-center hidden">
+          <i class="fas fa-trash-alt mr-2"></i> Delete
+        </button>
+        <button id="closeModalBtn" class="bg-gray-600 hover:bg-gray-700 text-white p-3 rounded-lg btn flex items-center">
+          <i class="fas fa-times mr-2"></i> Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const db = new Dexie("LuxeNotesDB");
+    db.version(1).stores({
+      notes: '++id,title,content,createdAt,updatedAt,tags'
+    });
+
+    const addNoteBtn = document.getElementById('addNoteBtn');
+    const notesList = document.getElementById('notesList');
+    const searchInput = document.getElementById('searchInput');
+    const noteModal = document.getElementById('noteModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const noteText = document.getElementById('noteText');
+    const tagField = document.getElementById('tagField');
+    const tagsDisplay = document.getElementById('tagsDisplay');
+    const saveNoteBtn = document.getElementById('saveNoteBtn');
+    const deleteNoteBtn = document.getElementById('deleteNoteBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const toggleThemeBtn = document.getElementById('toggleThemeBtn');
+
+    let currentNoteId = null;
+    let isDarkMode = true;
+
+    addNoteBtn.addEventListener('click', () => openModal());
+    closeModalBtn.addEventListener('click', closeModal);
+    saveNoteBtn.addEventListener('click', saveNote);
+    deleteNoteBtn.addEventListener('click', deleteNote);
+    searchInput.addEventListener('input', debounce(searchNotes, 300));
+    toggleThemeBtn.addEventListener('click', toggleTheme);
+    noteText.addEventListener('input', debounce(autoSave, 1000));
+
+    document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    async function openModal(noteId = null) {
+      currentNoteId = noteId;
+      if (noteId) {
+        const note = await db.notes.get(noteId);
+        noteText.value = note.content;
+        tagField.value = note.tags ? note.tags.join(', ') : '';
+        updateTagsDisplay(note.tags || []);
+        modalTitle.textContent = 'Edit Note';
+        deleteNoteBtn.classList.remove('hidden');
+      } else {
+        noteText.value = '';
+        tagField.value = '';
+        updateTagsDisplay([]);
+        modalTitle.textContent = 'Add New Note';
+        deleteNoteBtn.classList.add('hidden');
+      }
+      noteModal.classList.remove('hidden');
+      noteText.focus();
+    }
+
+    function closeModal() {
+      noteModal.classList.add('hidden');
+      currentNoteId = null;
+    }
+
+    async function saveNote() {
+      const content = noteText.value.trim();
+      if (content) {
+        const title = content.split('\n')[0].replace(/^#*\s*/, '').substring(0, 50);
+        const tags = tagField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+        const note = {
+          title,
+          content,
+          tags,
+          updatedAt: new Date()
+        };
+        if (currentNoteId) {
+          await db.notes.update(currentNoteId, note);
+        } else {
+          note.createdAt = new Date();
+          await db.notes.add(note);
+        }
+        closeModal();
+        loadNotes();
+      }
+    }
+
+    async function deleteNote() {
+      if (currentNoteId) {
+        await db.notes.delete(currentNoteId);
+        closeModal();
+        loadNotes();
+      }
+    }
+
+    async function loadNotes() {
+      const notes = await db.notes.orderBy('updatedAt').reverse().toArray();
+      renderNotes(notes);
+    }
+
+    function renderNotes(notes) {
+      notesList.innerHTML = '';
+      notes.forEach(note => {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'note-container p-4 rounded-lg cursor-pointer';
+        noteEl.innerHTML = `
+          <h3 class="font-bold mb-2 text-lg text-indigo-300">${note.title}</h3>
+          <div class="markdown text-sm">${DOMPurify.sanitize(marked.parse(note.content.substring(0, 100)))}</div>
+          <div class="tags mt-2">
+            ${note.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+          </div>
+          <div class="text-xs text-gray-400 mt-2">Updated: ${formatDate(note.updatedAt)}</div>
+        `;
+        noteEl.addEventListener('click', () => openModal(note.id));
+        notesList.appendChild(noteEl);
+      });
+    }
+
+    async function searchNotes() {
+      const query = searchInput.value.toLowerCase();
+      const notes = await db.notes.filter(note => 
+        note.title.toLowerCase().includes(query) || 
+        note.content.toLowerCase().includes(query) ||
+        note.tags.some(tag => tag.toLowerCase().includes(query))
+      ).toArray();
+      renderNotes(notes);
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    function formatDate(date) {
+      return new Date(date).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function toggleTheme() {
+      isDarkMode = !isDarkMode;
+      document.body.classList.toggle('dark-mode', isDarkMode);
+      document.body.classList.toggle('light-mode', !isDarkMode);
+    }
+
+    function handleKeyboardShortcuts(e) {
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        openModal();
+      } else if (e.ctrlKey && e.key === 's' && noteModal.classList.contains('hidden') === false) {
+        e.preventDefault();
+        saveNote();
+      }
+    }
+
+    async function autoSave() {
+      if (currentNoteId) {
+        const content = noteText.value.trim();
+        if (content) {
+          const title = content.split('\n')[0].replace(/^#*\s*/, '').substring(0, 50);
+          const tags = tagField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+          await db.notes.update(currentNoteId, {
+            title,
+            content,
+            tags,
+            updatedAt: new Date()
+          });
+        }
+      }
+    }
+
+    function updateTagsDisplay(tags) {
+      tagsDisplay.innerHTML = tags.map(tag => `<span class="tag">${tag}</span>`).join('');
+    }
+
+    tagField.addEventListener('input', () => {
+      const tags = tagField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+      updateTagsDisplay(tags);
+    });
+
+    window.onload = loadNotes;
+  </script>
+</body>
+</html>
