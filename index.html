@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PassGen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-color: #f7f7f7;
+            --text-color: #ffffff;
+            --text-secondary: #b3b3b3;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+        }
+        .premium-btn {
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            transition: all 0.3s ease;
+        }
+        .premium-btn:hover {
+            opacity: 0.9;
+        }
+        .modal {
+            background-color: var(--surface-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .scrollable {
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-color) var(--surface-color);
+        }
+        .scrollable::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollable::-webkit-scrollbar-track {
+            background: var(--surface-color);
+        }
+        .scrollable::-webkit-scrollbar-thumb {
+            background-color: var(--primary-color);
+            border-radius: 20px;
+        }
+        input, select {
+            background-color: var(--bg-color);
+            border: 1px solid var(--text-secondary);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="max-w-md mx-auto text-center p-6">
+        <h1 class="text-3xl font-semibold mb-2 text-primary-color">PassGen</h1>
+        <h2 class="text-lg font-semibold mb-3 text-gray-300">Secrets management system for post-quantum era. Effortless password generation, encryption, and storage (offline). </h2>
+        <button id="generatePasswordBtn" class="premium-btn py-3 px-6 rounded-md text-xl font-bold mb-4 w-full">Generate Password</button>
+        
+        <button onclick="location.href='encore.html'" class="bg-surface-color text-text-color py-3 px-6 rounded-md text-xl font-medium w-full border border-text-secondary">Advanced Encryptions</button>
+        <button id="viewSavedPasswordsBtn" class="text-blue-300  mt-4 py-3 px-6 rounded-md text-xl font-semibold underline ">Saved Passwords</button>
+    </div>
+
+    <div id="passwordModal" class="fixed inset-0 flex items-center justify-center hidden bg-black bg-opacity-50">
+        <div class="modal p-5 rounded-lg shadow-lg max-w-md w-full">
+            <h2 class="text-xl font-semibold mb-6">Generate Password</h2>
+            <input type="text" id="passwordName" class="w-full mb-4 p-3 rounded-md text-text-color" placeholder="Enter name for the password">
+            <select id="passwordLength" class="w-full mb-4 p-3 rounded-md text-text-color">
+                <option value="12">12 characters</option>
+                <option value="18">18 characters</option>
+                <option value="24">24 characters</option>
+                <option value="30">30 characters</option>
+            </select>
+            <button id="generateBtn" class="premium-btn py-2 px-4 rounded-md text-xl font-bold w-full mb-4">Generate</button>
+            <button id="closeModalBtn" class=" bg-surface-color text-text-color py-2 px-4 rounded-md text-lg font-medium w-full border border-text-secondary">Cancel</button>
+        </div>
+    </div>
+
+    <div id="generatedPasswordContainer" class="fixed inset-0 flex items-center justify-center hidden bg-black bg-opacity-50">
+        <div class="modal p-4 rounded-lg shadow-lg max-w-md w-full">
+            <h2 class="text-xl font-semibold mb-6">Generated Password</h2>
+            <div id="generatedPassword" class="bg-gray-800 p-4 rounded-md text-lg font-medium mb-6 break-all"></div>
+            <div class="flex space-x-4">
+                <button id="copyPasswordBtn" class="premium-btn py-2 px-4 font-semibold rounded-md flex-grow">Copy</button>
+                <button id="savePasswordBtn" class="premium-btn py-2 px-4 font-semibold rounded-md flex-grow">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="savedPasswordsModal" class="fixed inset-0 flex items-center justify-center hidden bg-black bg-opacity-50">
+        <div class="modal p-4 rounded-lg shadow-lg max-h-full  max-w-lg w-full">
+            <h2 class="text-xl font-semibold mb-4">Password Database (offline)</h2>
+            
+            
+            <input type="text" id="searchPasswords" class="w-full mb-4 p-2 rounded-md text-text-color" placeholder="Search passwords...">
+            <div id="savedPasswordsList" class="mb-4 max-h-[70vh] scrollable overflow-y-auto"></div>
+            <div class="flex justify-between mb-0">
+                <button id="exportPasswordsBtn" class="premium-btn py-1 px-2 rounded-md text-sm font-bold">Export</button>
+                <input type="file" id="importPasswordsInput" class="hidden" accept=".json">
+                <label for="importPasswordsInput" class="premium-btn py-1 px-2 rounded-md text-sm font-bold cursor-pointer">Import</label> 
+                <button id="closeSavedPasswordsModalBtn" class="premium-btn bg-red-300 py-1 px-2 rounded-md text-sm font-bold cursor-pointer">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        const elements = {
+            generatePasswordBtn: document.getElementById('generatePasswordBtn'),
+            passwordModal: document.getElementById('passwordModal'),
+            closeModalBtn: document.getElementById('closeModalBtn'),
+            generateBtn: document.getElementById('generateBtn'),
+            passwordName: document.getElementById('passwordName'),
+            passwordLength: document.getElementById('passwordLength'),
+            generatedPasswordContainer: document.getElementById('generatedPasswordContainer'),
+            generatedPassword: document.getElementById('generatedPassword'),
+            copyPasswordBtn: document.getElementById('copyPasswordBtn'),
+            savePasswordBtn: document.getElementById('savePasswordBtn'),
+            viewSavedPasswordsBtn: document.getElementById('viewSavedPasswordsBtn'),
+            savedPasswordsModal: document.getElementById('savedPasswordsModal'),
+            savedPasswordsList: document.getElementById('savedPasswordsList'),
+            closeSavedPasswordsModalBtn: document.getElementById('closeSavedPasswordsModalBtn'),
+            exportPasswordsBtn: document.getElementById('exportPasswordsBtn'),
+            importPasswordsInput: document.getElementById('importPasswordsInput'),
+            searchPasswords: document.getElementById('searchPasswords')
+        };
+
+        const passwordManager = {
+            generatePassword(length) {
+                const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
+                return Array.from(crypto.getRandomValues(new Uint32Array(length)))
+                    .map(x => charset[x % charset.length])
+                    .join('');
+            },
+
+            savePassword(name, password) {
+                try {
+                    let passwords = JSON.parse(localStorage.getItem('passwords')) || [];
+                    passwords.push({ name, password, date: new Date().toLocaleString() });
+                    localStorage.setItem('passwords', JSON.stringify(passwords));
+                    this.showNotification('Password saved successfully.');
+                } catch (error) {
+                    this.showNotification('Failed to save password. Please try again.', 'error');
+                }
+            },
+
+            deletePassword(index) {
+                try {
+                    let passwords = JSON.parse(localStorage.getItem('passwords')) || [];
+                    passwords.splice(index, 1);
+                    localStorage.setItem('passwords', JSON.stringify(passwords));
+                    this.viewSavedPasswords();
+                    this.showNotification('Password deleted successfully.');
+                } catch (error) {
+                    this.showNotification('Failed to delete password. Please try again.', 'error');
+                }
+            },
+
+            exportPasswords() {
+                try {
+                    const passwords = localStorage.getItem('passwords');
+                    const blob = new Blob([passwords], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'passwords.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    this.showNotification('Passwords exported successfully.');
+                } catch (error) {
+                    this.showNotification('Failed to export passwords. Please try again.', 'error');
+                }
+            },
+
+            importPasswords(event) {
+                try {
+                    const file = event.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const passwords = JSON.parse(e.target.result);
+                        localStorage.setItem('passwords', JSON.stringify(passwords));
+                        this.viewSavedPasswords();
+                        this.showNotification('Passwords imported successfully.');
+                    };
+                    reader.readAsText(file);
+                } catch (error) {
+                    this.showNotification('Failed to import passwords. Please check the file and try again.', 'error');
+                }
+            },
+
+            viewSavedPasswords(searchTerm = '') {
+                try {
+                    const passwords = JSON.parse(localStorage.getItem('passwords')) || [];
+                    const filteredPasswords = passwords.filter(p => 
+                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        p.password.includes(searchTerm)
+                    );
+                    elements.savedPasswordsList.innerHTML = filteredPasswords.map((p, index) => `
+                        <div class="mb-2 p-2 border border-text-secondary rounded-md">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-medium">${this.escapeHtml(p.name)}</h3>
+                                <button class="bg-red-500 text-white py-1 px-2 rounded-md text-sm font-semibold  delete-password-btn" data-index="${index}">Delete</button>
+                            </div>
+                            <p class="mb-1 font-mono text-sm">${this.escapeHtml(p.password)}</p>
+                            <p class="text-xs text-text-secondary">${this.escapeHtml(p.date)}</p>
+                        </div>
+                    `).join('');
+
+                    elements.savedPasswordsModal.classList.remove('hidden');
+                } catch (error) {
+                    this.showNotification('Failed to load saved passwords. Please try again.', 'error');
+                }
+            },
+
+            showNotification(message, type = 'success') {
+                const notificationContainer = document.createElement('div');
+                notificationContainer.className = `fixed bottom-4 right-4 p-4 rounded-md ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white text-sm`;
+                notificationContainer.textContent = message;
+                document.body.appendChild(notificationContainer);
+                setTimeout(() => notificationContainer.remove(), 3000);
+            },
+
+            escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            },
+
+            init() {
+                elements.generatePasswordBtn.addEventListener('click', () => elements.passwordModal.classList.remove('hidden'));
+                elements.closeModalBtn.addEventListener('click', () => elements.passwordModal.classList.add('hidden'));
+                elements.closeSavedPasswordsModalBtn.addEventListener('click', () => elements.savedPasswordsModal.classList.add('hidden'));
+                elements.exportPasswordsBtn.addEventListener('click', () => this.exportPasswords());
+                elements.importPasswordsInput.addEventListener('change', (event) => this.importPasswords(event));
+                elements.viewSavedPasswordsBtn.addEventListener('click', () => this.viewSavedPasswords());
+
+                elements.generateBtn.addEventListener('click', () => {
+                    const name = elements.passwordName.value.trim();
+                    const length = parseInt(elements.passwordLength.value);
+                    if (!name) {
+                        this.showNotification('Please enter a name for the password.', 'error');
+                        return;
+                    }
+
+                    const password = this.generatePassword(length);
+                    elements.generatedPassword.textContent = password;
+                    elements.passwordModal.classList.add('hidden');
+                    elements.generatedPasswordContainer.classList.remove('hidden');
+
+                    elements.copyPasswordBtn.onclick = () => {
+                        navigator.clipboard.writeText(password)
+                            .then(() => this.showNotification('Password copied to clipboard.'))
+                            .catch(() => this.showNotification('Failed to copy password.', 'error'));
+                    };
+                    elements.savePasswordBtn.onclick = () => {
+                        this.savePassword(name, password);
+                        elements.generatedPasswordContainer.classList.add('hidden');
+                        elements.passwordName.value = '';
+                    };
+                });
+
+                elements.savedPasswordsList.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('delete-password-btn')) {
+                        const index = parseInt(e.target.dataset.index);
+                        this.deletePassword(index);
+                    }
+                });
+
+                elements.searchPasswords.addEventListener('input', (e) => {
+                    this.viewSavedPasswords(e.target.value);
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        elements.passwordModal.classList.add('hidden');
+                        elements.savedPasswordsModal.classList.add('hidden');
+                        elements.generatedPasswordContainer.classList.add('hidden');
+                    }
+                });
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => passwordManager.init());
+    })();
+    </script>
+</body>
+</html>
